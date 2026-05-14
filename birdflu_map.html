@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>H5N1 HPAI Poultry Outbreaks — US 2024–2026</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fafaf8;color:#111}
+header{padding:16px 22px 10px;border-bottom:1px solid #e0ddd5;background:#fff}
+header h1{font-size:16px;font-weight:500;margin-bottom:3px}
+header p{font-size:11.5px;color:#777;line-height:1.5}
+#controls{display:flex;align-items:center;gap:7px;padding:9px 22px;background:#fff;border-bottom:1px solid #e0ddd5;flex-wrap:wrap}
+#controls .lbl{font-size:12.5px;color:#555;font-weight:500;margin-right:3px}
+.yr-btn{font-size:11.5px;padding:3px 13px;border-radius:20px;border:1px solid #ccc;background:#fff;color:#444;cursor:pointer;transition:background .15s,color .15s}
+.yr-btn.active{background:#1e3c82;color:#fff;border-color:#1e3c82}
+.yr-btn:hover:not(.active){background:#f0eee8}
+#map-wrap{width:100%;background:#fafaf8}
+svg{display:block;width:100%}
+.state{stroke:#fff;stroke-width:0.7}
+.county-dot{cursor:pointer}
+#legend{display:flex;flex-wrap:wrap;gap:7px 16px;padding:9px 20px;font-size:11.5px;color:#555;align-items:center;background:#fff;border-top:1px solid #e0ddd5}
+#legend b{font-weight:500;font-size:12.5px;color:#111;margin-right:2px}
+.sw{width:12px;height:12px;border-radius:2px;display:inline-block;vertical-align:middle;margin-right:3px}
+.dot-lbl{width:10px;height:10px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:3px;border:1.5px solid #fff;outline:1px solid}
+footer{padding:7px 20px;font-size:10.5px;color:#aaa;border-top:1px solid #e0ddd5;background:#fff}
+#tt{position:absolute;background:#fff;border:1px solid rgba(0,0,0,.13);border-radius:9px;padding:11px 13px 10px;font-size:11.5px;color:#111;pointer-events:none;display:none;max-width:230px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+#tt .tt-name{font-weight:500;font-size:13px;margin-bottom:5px}
+#tt .tt-birds{font-size:19px;font-weight:500;margin-bottom:3px}
+#tt .tt-sub{color:#666;margin-bottom:1px}
+#tt .badge{display:inline-block;background:rgba(160,30,30,.1);color:#a01e1e;font-size:10px;font-weight:500;padding:2px 7px;border-radius:4px;margin-bottom:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>H5N1 HPAI Poultry Outbreaks — United States, 2024–2026</h1>
+  <p>Commercial &amp; upland gamebird flocks. Dots = key counties sized by birds affected. Hover dots to explore. Works fully offline — no internet required.</p>
+</header>
+<div id="controls">
+  <span class="lbl">Show year:</span>
+  <button class="yr-btn active" data-yr="all">All years</button>
+  <button class="yr-btn" data-yr="2024">2024</button>
+  <button class="yr-btn" data-yr="2025">2025</button>
+  <button class="yr-btn" data-yr="2026">2026 (new)</button>
+</div>
+<div id="map-wrap">
+  <svg id="map" viewBox="0 0 900 520"></svg>
+</div>
+<div id="legend">
+  <b>Commercial flocks</b>
+  <span><span class="sw" style="background:#f5f1ec;border:1px solid #bbb"></span>None</span>
+  <span><span class="sw" style="background:#fdd49e"></span>1–10</span>
+  <span><span class="sw" style="background:#fc8d59"></span>11–30</span>
+  <span><span class="sw" style="background:#d7301f"></span>31–80</span>
+  <span><span class="sw" style="background:#7f0000"></span>80+</span>
+  <span style="margin-left:6px"><span class="dot-lbl" style="background:rgba(30,60,130,.78);outline-color:rgba(30,60,130,.4)"></span>2024–25 county</span>
+  <span><span class="dot-lbl" style="background:rgba(160,30,30,.82);outline-color:rgba(160,30,30,.35)"></span>2026 county (new)</span>
+</div>
+<div id="tt">
+  <div class="tt-name" id="tt-name"></div>
+  <div id="tt-badge" class="badge" style="display:none">2026 new</div>
+  <div class="tt-birds" id="tt-birds"></div>
+  <div class="tt-sub" id="tt-flocks"></div>
+  <div class="tt-sub" id="tt-type"></div>
+  <div class="tt-sub" style="color:#999;font-size:10.5px" id="tt-year"></div>
+</div>
+<footer>Sources: USDA APHIS · WATT Poultry · Investigate Midwest · Red River Farm Network · High Plains Journal &nbsp;·&nbsp; 203M+ birds affected across 1,700+ flocks since 2022 &nbsp;·&nbsp; Data through May 2026</footer>
+
+<script>
+function albers(lon,lat){
+  const d2r=Math.PI/180,phi1=29.5*d2r,phi2=45.5*d2r,phi0=23*d2r,lam0=-96*d2r,R=6371;
+  const n=(Math.sin(phi1)+Math.sin(phi2))/2;
+  const C=Math.cos(phi1)*Math.cos(phi1)+2*n*Math.sin(phi1);
+  const rho0=R*Math.sqrt(C-2*n*Math.sin(phi0))/n;
+  const phi=lat*d2r,lam=lon*d2r;
+  const rho=R*Math.sqrt(C-2*n*Math.sin(phi))/n;
+  const th=n*(lam-lam0);
+  return [rho*Math.sin(th), rho0-rho*Math.cos(th)];
+}
+const STATES={
+  AL:[[-88.5,35],[-88.2,30.2],[-85,30],[-84.9,32.4],[-85.4,35]],
+  AZ:[[-114.8,37],[-114.6,32.7],[-111.1,31.3],[-109.1,31.3],[-109.1,37]],
+  AR:[[-94.6,36.5],[-94.4,33],[-91.2,29.7],[-89.6,33],[-89.7,35]],
+  CA:[[-124.4,42],[-124,37],[-120.5,34.5],[-117.1,32.5],[-114.7,32.7],[-114.6,35],[-119,38.5],[-120,39],[-120,42]],
+  CO:[[-109.1,41],[-102,41],[-102,37],[-109.1,37]],
+  CT:[[-73.7,42.1],[-71.8,42.1],[-71.8,41],[-73.7,41]],
+  DE:[[-75.8,39.8],[-75.1,39.8],[-75.1,38.4],[-75.8,38.4]],
+  FL:[[-87.6,31],[-85,30],[-80,25],[-81,24.6],[-82,26],[-82,28.5],[-80,31]],
+  GA:[[-85.6,35],[-85,30.4],[-81,30.4],[-80.9,32],[-83.1,35]],
+  ID:[[-117,49],[-117,42],[-111,42],[-111,44.5],[-114,46],[-116,49]],
+  IL:[[-91.5,42.5],[-88,42.5],[-87.5,41.7],[-88,38],[-89.2,37],[-91.5,40]],
+  IN:[[-88.1,41.8],[-84.8,41.8],[-84.8,38],[-87.5,38]],
+  IA:[[-96.6,43.5],[-91,43.5],[-91,40.4],[-95.9,40.4]],
+  KS:[[-102.1,40],[-94.6,40],[-94.6,37],[-102.1,37]],
+  KY:[[-89.6,37],[-83,37],[-82.5,38.8],[-84.8,39.1]],
+  LA:[[-94,33],[-89.5,29],[-88.8,30],[-89.7,30.5],[-91.5,29],[-94,30]],
+  ME:[[-71.1,47.5],[-67,47.1],[-67,44.8],[-70.7,43.1]],
+  MD:[[-79.5,39.7],[-75.1,39.7],[-75.1,38.5],[-77.5,37.9],[-79.5,38.5]],
+  MA:[[-73.5,42.9],[-70.9,42.9],[-70,41.7],[-73.5,41.7]],
+  MI:[[-90.4,48.2],[-84,48.2],[-84,45.8],[-83.5,43],[-84.5,41.7],[-86.5,41.8],[-90.4,46.5]],
+  MN:[[-97.2,49],[-89.5,48],[-89.5,43.5],[-96.6,43.5]],
+  MS:[[-91.7,34],[-88.1,34],[-88.4,30.2],[-89.9,29],[-91.7,33]],
+  MO:[[-95.8,40.6],[-89.1,36.8],[-88.9,37],[-91.5,36.5],[-94.6,36.5]],
+  MT:[[-116,49],[-104,49],[-104,45],[-111,44.5],[-116,46]],
+  NE:[[-104.1,43],[-95.3,43],[-95.3,40],[-102.1,40],[-104.1,41]],
+  NV:[[-120,42],[-114.1,37],[-114,35.2],[-117,35],[-120,39]],
+  NH:[[-72.6,45.3],[-70.7,43.1],[-72,43]],
+  NJ:[[-75.6,41.4],[-74.1,41.4],[-74,39],[-75.6,39.6]],
+  NM:[[-109.1,37],[-103,37],[-103,32],[-106.6,32],[-111.1,31.3],[-109.1,31.3]],
+  NY:[[-79.8,43],[-71.9,45],[-73.3,40.7],[-74.3,40.6]],
+  NC:[[-84.3,36.6],[-75.5,36.5],[-75.4,35.2],[-83.1,35]],
+  ND:[[-104,49],[-97.2,49],[-97.2,45.9],[-104,45.9]],
+  OH:[[-84.8,42.3],[-80.5,42.3],[-80.5,38.4],[-84.8,38.5]],
+  OK:[[-103,37],[-94.4,36.5],[-94.5,33.6],[-100,28],[-103,36.5]],
+  OR:[[-124.6,46.2],[-116.5,46],[-116.5,42],[-124.6,42]],
+  PA:[[-80.5,42.3],[-74.7,42.2],[-74.7,39.7],[-80.5,39.7]],
+  RI:[[-71.9,42],[-71.1,42],[-71.1,41.1],[-71.9,41.1]],
+  SC:[[-83.4,35.2],[-78.5,34],[-79.5,32],[-81.5,32]],
+  SD:[[-104.1,45.9],[-96.4,45.9],[-96.4,43],[-104.1,43]],
+  TN:[[-90.3,36.5],[-81.6,36.6],[-82,35],[-88,35],[-90.3,35]],
+  TX:[[-106.6,32],[-103,32],[-94,30],[-93.5,29.8],[-97.3,26],[-100,28],[-103,29]],
+  UT:[[-114.1,42],[-109.1,42],[-109.1,37],[-114.1,37]],
+  VT:[[-73.4,45],[-71.5,45],[-72.5,43],[-73.4,43]],
+  VA:[[-83.7,37.3],[-75.2,37.9],[-75.2,37],[-77.5,35.9],[-83.7,36.5]],
+  WA:[[-124.8,49],[-116.9,49],[-116.9,46],[-124.8,46.5]],
+  WV:[[-82.6,40.6],[-77.7,39.6],[-77.7,37.2],[-80.9,37.4]],
+  WI:[[-92.9,46.8],[-86.8,45.5],[-87,42.5],[-91,42.5]],
+  WY:[[-111.1,45],[-104.1,45],[-104.1,41],[-111.1,41]]
+};
+const ABBR_NAME={AL:'Alabama',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',CT:'Connecticut',DE:'Delaware',FL:'Florida',GA:'Georgia',ID:'Idaho',IL:'Illinois',IN:'Indiana',IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',MS:'Mississippi',MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming'};
+const FLOCKS={'California':[59,10,3],'Ohio':[1,70,0],'Indiana':[1,67,43],'Minnesota':[24,23,4],'South Dakota':[17,20,9],'Michigan':[11,6,3],'Pennsylvania':[0,10,20],'Iowa':[10,6,1],'Colorado':[4,0,3],'Utah':[5,4,0],'Maryland':[0,6,0],'North Carolina':[2,7,4],'Delaware':[0,3,0],'Arkansas':[1,5,1],'Washington':[1,2,0],'Wisconsin':[3,2,2],'Georgia':[0,3,0],'Virginia':[0,1,0],'North Dakota':[1,4,2],'Nebraska':[2,1,0],'Illinois':[2,2,1],'Missouri':[5,0,0],'Kansas':[2,1,1],'Oklahoma':[3,0,0],'Tennessee':[1,0,0],'Alabama':[1,0,0],'Mississippi':[2,1,0],'Oregon':[1,0,0],'Texas':[1,1,0],'Arizona':[1,0,0],'New Mexico':[1,0,0],'New York':[0,1,0],'South Carolina':[1,1,1]};
+function getFlocks(name,yr){const d=FLOCKS[name];if(!d)return 0;if(yr==='all')return d[0]+d[1]+d[2];if(yr==='2024')return d[0];if(yr==='2025')return d[1];if(yr==='2026')return d[2];return 0;}
+function stateColor(n,yr){const p=yr==='2026'?['#f5f1ec','#fde8b0','#f4a93a','#c97010','#7a3e00']:['#f5f1ec','#fdd49e','#fc8d59','#d7301f','#7f0000'];if(!n)return p[0];if(n<=10)return p[1];if(n<=30)return p[2];if(n<=80)return p[3];return p[4];}
+const DOTS=[
+  {name:'Merced Co, CA',lon:-120.72,lat:37.19,birds:3.5,flocks:12,year:'2024',type:'Layer hens & turkeys',isNew:false},
+  {name:'Fresno Co, CA',lon:-119.78,lat:36.74,birds:2.8,flocks:11,year:'2024',type:'Mixed poultry',isNew:false},
+  {name:'Stanislaus Co, CA',lon:-120.99,lat:37.56,birds:1.2,flocks:5,year:'2024–25',type:'Commercial poultry',isNew:false},
+  {name:'Sonoma Co, CA',lon:-122.99,lat:38.52,birds:0.5,flocks:3,year:'2024–25',type:'Duck & game birds',isNew:false},
+  {name:'Darke Co, OH',lon:-84.63,lat:40.13,birds:8.2,flocks:18,year:'2025',type:'Egg layers',isNew:false},
+  {name:'Mercer Co, OH',lon:-84.64,lat:40.54,birds:6.1,flocks:67,year:'2025',type:'Egg layers & turkeys',isNew:false},
+  {name:'Jay Co, IN',lon:-84.93,lat:40.44,birds:5.4,flocks:16,year:'2025',type:'Egg layers',isNew:false},
+  {name:'Randolph Co, IN',lon:-85.02,lat:40.15,birds:3.2,flocks:9,year:'2025',type:'Egg layers',isNew:false},
+  {name:'Sioux Co, IA',lon:-96.18,lat:43.08,birds:12.1,flocks:5,year:'2024–25',type:'Egg layers (largest US loss)',isNew:false},
+  {name:'Stearns Co, MN',lon:-94.61,lat:45.55,birds:1.1,flocks:7,year:'2024',type:'Meat turkeys',isNew:false},
+  {name:'Meeker Co, MN',lon:-94.55,lat:45.12,birds:0.7,flocks:5,year:'2024',type:'Meat turkeys',isNew:false},
+  {name:'Ottawa Co, MI',lon:-86.09,lat:42.93,birds:3.8,flocks:8,year:'2024–25',type:'Meat turkeys',isNew:false},
+  {name:'Ionia Co, MI',lon:-85.07,lat:42.93,birds:3.1,flocks:3,year:'2024',type:'Egg layers',isNew:false},
+  {name:'Charles Mix Co, SD',lon:-98.75,lat:43.24,birds:0.4,flocks:3,year:'2024',type:'Meat turkeys',isNew:false},
+  {name:'Weld Co, CO',lon:-104.39,lat:40.55,birds:3.1,flocks:2,year:'2024',type:'Egg layers',isNew:false},
+  {name:'Parmer Co, TX',lon:-102.78,lat:34.53,birds:1.9,flocks:1,year:'2024',type:'Egg layers',isNew:false},
+  {name:'Wicomico Co, MD',lon:-75.65,lat:38.35,birds:0.5,flocks:3,year:'2025',type:'Broilers',isNew:false},
+  {name:'Hyde Co, NC',lon:-76.18,lat:35.40,birds:3.3,flocks:2,year:'2025',type:'Egg layers',isNew:false},
+  {name:'Lancaster Co, PA',lon:-76.33,lat:40.04,birds:1.5,flocks:4,year:'2025',type:'Mixed poultry',isNew:false},
+  {name:'Cache Co, UT',lon:-111.74,lat:41.73,birds:1.5,flocks:1,year:'2024',type:'Egg layers',isNew:false},
+  {name:'Lancaster Co, PA',lon:-76.18,lat:40.08,birds:7.6,flocks:18,year:'2026 ★',type:'Egg layers, broilers & ducks',isNew:true},
+  {name:'LaGrange Co, IN',lon:-85.65,lat:41.64,birds:2.8,flocks:15,year:'2026 ★',type:'Ducks & duck breeders',isNew:true},
+  {name:'Elkhart Co, IN',lon:-85.85,lat:41.60,birds:2.1,flocks:12,year:'2026 ★',type:'Ducks, turkeys & pullets',isNew:true},
+  {name:'Sampson Co, NC',lon:-78.37,lat:34.99,birds:0.3,flocks:3,year:'2026 ★',type:'Meat turkeys',isNew:true},
+  {name:'Butte Co, CA',lon:-121.57,lat:39.67,birds:0.2,flocks:2,year:'2026 ★',type:'Upland gamebirds',isNew:true},
+  {name:'Charles Mix Co, SD',lon:-99.05,lat:43.44,birds:0.4,flocks:4,year:'2026 ★',type:'Meat turkeys',isNew:true},
+  {name:'LaMoure Co, ND',lon:-98.46,lat:46.46,birds:0.08,flocks:1,year:'2026 ★',type:'Meat turkeys',isNew:true},
+  {name:'Big Stone Co, MN',lon:-96.46,lat:45.41,birds:0.06,flocks:1,year:'2026 ★',type:'Meat turkeys',isNew:true},
+  {name:'Edmunds Co, SD',lon:-99.21,lat:45.42,birds:0.1,flocks:2,year:'2026 ★',type:'Turkey breeders',isNew:true},
+  {name:'Crawford Co, IL',lon:-87.78,lat:39.00,birds:0.02,flocks:1,year:'2026 ★',type:'Meat turkeys',isNew:true},
+  {name:'Clay Co, AR',lon:-90.41,lat:36.37,birds:0.19,flocks:1,year:'2026 ★',type:'Broilers',isNew:true},
+  {name:'Dauphin Co, PA',lon:-76.79,lat:40.41,birds:0.07,flocks:1,year:'2026 ★',type:'Egg layers',isNew:true},
+  {name:'Lee Co, SC',lon:-80.26,lat:34.17,birds:0.04,flocks:1,year:'2026 ★',type:'Meat turkeys',isNew:true},
+  {name:'Pratt Co, KS',lon:-98.76,lat:37.64,birds:0.38,flocks:1,year:'2026 ★',type:'Pullets',isNew:true}
+];
+const VW=900,VH=520;
+const svg=document.getElementById('map');
+let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+Object.values(STATES).forEach(pts=>pts.forEach(([lo,la])=>{const[x,y]=albers(lo,la);if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;}));
+const scaleX=(VW-60)/(maxX-minX),scaleY=(VH-60)/(maxY-minY),sc=Math.min(scaleX,scaleY);
+const offX=(VW-(maxX-minX)*sc)/2-minX*sc,offY=(VH-(maxY-minY)*sc)/2-minY*sc;
+function project(lon,lat){const[x,y]=albers(lon,lat);return[x*sc+offX,VH-(y*sc+offY)];}
+function rScale(b){return 4+Math.sqrt(Math.max(b,0.02))*5.2;}
+const stateEls={};
+Object.entries(STATES).forEach(([abbr,pts])=>{const name=ABBR_NAME[abbr];const projected=pts.map(([lo,la])=>project(lo,la));const d='M'+projected.map(([x,y])=>x.toFixed(1)+','+y.toFixed(1)).join('L')+'Z';const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',d);path.setAttribute('class','state');path.setAttribute('fill',stateColor(getFlocks(name,'all'),'all'));svg.appendChild(path);stateEls[name]=path;});
+const tt=document.getElementById('tt'),mapWrap=document.getElementById('map-wrap');
+mapWrap.style.position='relative';
+function showTip(d,svgX,svgY){const birdStr=d.birds>=1?d.birds.toFixed(1)+'M birds affected':Math.round(d.birds*1000)+'K birds affected';document.getElementById('tt-name').textContent=d.name;document.getElementById('tt-birds').textContent=birdStr;document.getElementById('tt-birds').style.color=d.isNew?'#a01e1e':'#1e3c82';document.getElementById('tt-flocks').textContent=d.flocks+' flock'+(d.flocks>1?'s':'')+' lost';document.getElementById('tt-type').textContent=d.type;document.getElementById('tt-year').textContent='Year: '+d.year;document.getElementById('tt-badge').style.display=d.isNew?'inline-block':'none';tt.style.display='block';const wR=mapWrap.getBoundingClientRect(),sR=svg.getBoundingClientRect(),sc2=sR.width/VW;let px=sR.left-wR.left+svgX*sc2+14,py=sR.top-wR.top+svgY*sc2-40;if(px+220>wR.width-8)px=sR.left-wR.left+svgX*sc2-234;if(py<4)py=4;if(py+130>wR.height-4)py=wR.height-134;tt.style.left=px+'px';tt.style.top=py+'px';}
+function hideTip(){tt.style.display='none';}
+const dotEls=[];
+DOTS.forEach(d=>{const[cx,cy]=project(d.lon,d.lat);const r=rScale(d.birds);const baseOp=0.52+Math.min(d.birds/14,0.38);const fill=d.isNew?'rgba(160,30,30,0.83)':'rgba(30,60,130,0.82)';const ringClr=d.isNew?'rgba(160,30,30,0.22)':'rgba(30,60,130,0.22)';const ring=document.createElementNS('http://www.w3.org/2000/svg','circle');ring.setAttribute('cx',cx.toFixed(1));ring.setAttribute('cy',cy.toFixed(1));ring.setAttribute('r',r);ring.setAttribute('fill','none');ring.setAttribute('stroke',ringClr);ring.setAttribute('stroke-width',r*0.55);svg.appendChild(ring);const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');dot.setAttribute('cx',cx.toFixed(1));dot.setAttribute('cy',cy.toFixed(1));dot.setAttribute('r',r);dot.setAttribute('fill',fill);dot.setAttribute('stroke','#fff');dot.setAttribute('stroke-width','1.5');dot.style.cursor='pointer';dot.style.opacity=baseOp;dot.addEventListener('mouseenter',()=>{dot.setAttribute('r',r*1.38);dot.setAttribute('stroke-width','2.5');dot.style.opacity='1';ring.setAttribute('r',r*1.85);ring.setAttribute('stroke-width',r*0.28);showTip(d,cx,cy);});dot.addEventListener('mouseleave',()=>{dot.setAttribute('r',r);dot.setAttribute('stroke-width','1.5');dot.style.opacity=baseOp;ring.setAttribute('r',r);ring.setAttribute('stroke-width',r*0.55);hideTip();});svg.appendChild(dot);dotEls.push({ring,dot,d,baseOp});});
+[[1,'1M'],[5,'5M'],[12,'12M']].reduce((bx,[b,lbl])=>{const r=rScale(b);const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',bx+r);c.setAttribute('cy',VH-16);c.setAttribute('r',r);c.setAttribute('fill','rgba(30,60,130,0.55)');c.setAttribute('stroke','#fff');c.setAttribute('stroke-width','1.2');svg.appendChild(c);const t=document.createElementNS('http://www.w3.org/2000/svg','text');t.setAttribute('x',bx+r);t.setAttribute('y',VH-2);t.setAttribute('text-anchor','middle');t.setAttribute('font-size','9');t.setAttribute('fill','#aaa');t.setAttribute('font-family','system-ui,sans-serif');t.textContent=lbl;svg.appendChild(t);return bx+r*2+24;},14);
+const lt=document.createElementNS('http://www.w3.org/2000/svg','text');lt.setAttribute('x','14');lt.setAttribute('y',VH-32);lt.setAttribute('font-size','9');lt.setAttribute('fill','#bbb');lt.setAttribute('font-family','system-ui,sans-serif');lt.textContent='Birds affected (dot size)';svg.appendChild(lt);
+function updateColors(yr){Object.entries(stateEls).forEach(([name,el])=>{el.setAttribute('fill',stateColor(getFlocks(name,yr),yr));});}
+function updateDots(yr){dotEls.forEach(({ring,dot,d,baseOp})=>{const show=yr==='all'||(yr==='2024'&&d.year.startsWith('2024'))||(yr==='2025'&&(d.year.startsWith('2025')||d.year==='2024–25'))||(yr==='2026'&&(d.year.startsWith('2026')||d.year.includes('★')));dot.style.opacity=show?baseOp:0;ring.style.opacity=show?baseOp:0;dot.style.pointerEvents=show?'auto':'none';});}
+document.querySelectorAll('.yr-btn').forEach(btn=>{btn.addEventListener('click',function(){document.querySelectorAll('.yr-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');updateColors(this.dataset.yr);updateDots(this.dataset.yr);hideTip();});});
+</script>
+</body>
+</html>
